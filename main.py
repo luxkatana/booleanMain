@@ -58,7 +58,7 @@ async def leaderboard(ctx: discord.ApplicationContext) -> None:
         async for message in channel.history():
             if message.author.id in counters:
                 counters[message.author.id]["count"] += 1
-            elif message.author.id not in counters:
+            elif message.author.id not in counters and message.author.bot == False:
                 counters.update({message.author.id: {"count": 1}})
     high_to_low = []
     copy = counters
