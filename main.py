@@ -161,4 +161,24 @@ async def leaderboard(ctx: discord.ApplicationContext) -> None:
             break
         embed.add_field(name=f"{i + 1}st - {member}", value="**{}** message(s)".format(record["count"]), inline=False)
     await respond_message.edit_original_response(embed=embed)
+@messagecounter.command(name="leaderboard-resetted-people", description="Leaderboard for resetted people")
+async def leaderboard_reset(ctx: discord.ApplicationContext) -> None:
+    async with bot.pool.acquire()as conn:
+        async with conn.cursor(aiomysql.DictCursor)as cursor:
+            await cursor.execute("SELECT authorID, messagecount FROM messagecounter WHERE guildID=%s ORDER BY messagecount DESC;", (ctx.guild_id,))
+            fetch = await cursor.fetchall()
+            if fetch == ():
+                await ctx.respond(embed=discord.Embed(title="Oh", description="Wow, there are no resetted people in this server.", color=discord.Color.random()), ephemeral=True)
+            else:
+                e = discord.Embed(title="Leaderboard", colour=discord.Color.gold())
+                for i in range(0, 6):
+                    try:
+                        concept = fetch[i]
+                    except:
+                        break
+                    usr = ctx.guild.get_member(concept["authorID"])
+                    if usr == None:
+                        break
+                    e.add_field(name=f"{i + 1}st - {usr}", value="**{}** messages".format(concept["messagecount"]), inline=False)
+                await ctx.respond(embed=e, ephemeral=True)
 bot.run(config.BOT_TOKEN)
