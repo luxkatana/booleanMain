@@ -36,9 +36,7 @@ async def reset_everyone(ctx: discord.ApplicationContext) -> None:
             async with conn.cursor(aiomysql.DictCursor)as cursor:
                 await cursor.execute("SELECT * FROM messagecounter WHERE authorID=%s AND guildID=%s;", (member.id, member.guild.id))
                 fetch = await cursor.fetchall()
-                print(fetch == ())
                 if fetch == ():
-                    print(member)
                     await cursor.execute("INSERT INTO messagecounter VALUES(%s, %s, %s);", (member.id, member.guild.id, 0))
                 else:
                     await cursor.execute("UPDATE messagecounter SET messagecount=0 WHERE authorID=%s AND guildID=%s;", (member.id, member.guild.id))
