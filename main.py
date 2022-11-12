@@ -5,7 +5,9 @@ bot = commands.Bot(command_prefix="./", intents=discord.Intents.all(),
                    activity=discord.Game("Tests!!"),
                    debug_guilds=config.DEBUG_GUILDS)
 messagecounter = discord.SlashCommandGroup(name="messagecounter")
+checklists = discord.SlashCommandGroup(name="checklists", description="create checklists!")
 bot.add_application_command(messagecounter)
+bot.add_application_command(checklists)
 bot.load_extension("cogs")
 @bot.event
 async def on_ready() -> None:
@@ -181,4 +183,54 @@ async def leaderboard_reset(ctx: discord.ApplicationContext) -> None:
                         break
                     e.add_field(name=f"{i + 1}st - {usr}", value="**{}** messages".format(concept["messagecount"]), inline=False)
                 await ctx.respond(embed=e, ephemeral=True)
+@checklists.command(name="add")
+@discord.option(name="text", type=str, max_length=90, required=True)
+async def checklist_add(ctx:  discord.ApplicationContext, text: str) -> None:
+    async with bot.pool.acquire()as  conn:
+        async with conn.cursor(aiomysql.DictCursor)as cursor:
+            await cursor.execute("SELECT COUNT(*) AS COUNT FROM checklists WHERE authorID=%s AND guildID=%s;", (ctx.author.id, ctx.guild_id))
+            fetch = await cursor.fetchall()
+            if fetch[0]["COUNT"] >= 20:
+                embed = discord.Embed(title="No", description="You can only have 20 checklists.. Thats the max.", colour=discord.Color.red())
+                await ctx.respond(embed=embed, ephemeral=True)
+            else:
+                count = fetch[0]["COUNT"]
+                await cursor.execute("INSERT INTO checklists(authorID, guildID, note_text) VALUES(%s, %s, %s);", (ctx.author.id, ctx.guild_id, text))
+                await conn.commit()
+                await cursor.execute("SELECT ID from checklists WHERE authorID=%s AND guildID=%s;", (ctx.author.id, ctx.guild_id))
+                fetch = await cursor.fetchall()
+                embed = discord.Embed(title="Done", description="Successfully added a new checklist with the id of **{}**".format(fetch[-1]["ID"]), color=discord.Color.green())
+                embed.add_field(name="slots over", value="**{}** slots over".format( 20 - count - 1), inline=False)
+                embed.add_field(name="used", value="**{}** slots used".format(count + 1), inline=False)
+                embed.add_field(name="checklist text", value=text, inline=False)
+                await ctx.respond(embed=embed, ephemeral=True)
+@checklists.command(name="list")
+async def checklist_list(ctx:  discord.ApplicationContext) -> None:
+    async with bot.pool.acquire()as conn:
+        async with conn.cursor(aiomysql.DictCursor)as cursor:
+            await cursor.execute("SELECT ID, note_text FROM checklists WHERE authorID=%s AND guildID=%s;", (ctx.author.id, ctx.guild_id))
+            fetch = await cursor.fetchall()
+            if fetch == ():
+                await ctx.respond(embed=discord.Embed(title="Nothing", description="You dont have any checklists.", color=discord.Color.green()), ephemeral=True)
+            else:
+                embed = discord.Embed(title="checklist of {}".format(ctx.author), colour=discord.Color.green())
+                embed.set_footer(text="length -> {} checklists".format(len(fetch)), icon_url=ctx.author.display_avatar.url)
+                for value in fetch:
+                    embed.add_field(name="checklist ID-{}".format(value["ID"]), value=value["note_text"], inline=False)
+                await ctx.respond(embed=embed, ephemeral=True)
+@checklists.command(name="delete")
+@discord.option(name="checklist_id", required=True, type=int)
+async  def checklist_delete(ctx: discord.ApplicationContext, checklist_id: int) ->  None:
+    async with bot.pool.acquire()as conn:
+        async with conn.cursor(aiomysql.DictCursor)as cursor:
+            await cursor.execute("SELECT note_text FROM checklists WHERE authorID=%s AND guildID=%s AND ID=%s;", (ctx.author.id, ctx.guild_id, checklist_id))
+            fetch = await cursor.fetchall()
+            if fetch == ():
+                await ctx.respond(embed=discord.Embed(title="No", description=f"There is no checklist with the ID of **{checklist_id}**", color=discord.Color.red()), ephemeral=True)
+            else:
+                await cursor.execute("DELETE FROM checklists WHERE ID=%s;", (checklist_id,))
+                await conn.commit()
+                embed = discord.Embed(title="deleted", description=f"Successfully deleted the checklist with the id of **{checklist_id}**", color=discord.Color.green())
+                embed.add_field(name="checklist text", value=fetch[0]["note_text"], inline=False)
+                await ctx.respond(embed=embed, ephemeral=True)
 bot.run(config.BOT_TOKEN)
