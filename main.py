@@ -24,12 +24,9 @@ async def on_ready() -> None:
 async def on_message(message: discord.Message) -> None:
     if message.author != bot.user:
         async with bot.pool.acquire()as conn:
-            async with conn.cursor(aiomysql.DictCursor)as cursor:
-                await cursor.execute("SELECT messagecount FROM messagecounter WHERE authorID=%s and guildID=%s;", (message.author.id, message.guild.id))
-                fetch = await cursor.fetchall()
-                if fetch != ():
-                    await cursor.execute("UPDATE messagecounter SET messagecount=%s WHERE authorID=%s AND guildID=%s;", (fetch[0]["messagecount"] + 1,message.author.id, message.guild.id))
-                    await conn.commit()
+            async with conn.cursor()as cursor:
+                await cursor.execute("UPDATE messagecounter SET messagecount = messagecount + 1 WHERE authorID=%s AND guildID=%s;", (message.author.id, message.guild.id))
+                await conn.commit()
     await bot.process_commands(message)
 @messagecounter.command(name="reset-all")
 async def reset_everyone(ctx: discord.ApplicationContext) -> None:
@@ -233,4 +230,36 @@ async  def checklist_delete(ctx: discord.ApplicationContext, checklist_id: int) 
                 embed = discord.Embed(title="deleted", description=f"Successfully deleted the checklist with the id of **{checklist_id}**", color=discord.Color.green())
                 embed.add_field(name="checklist text", value=fetch[0]["note_text"], inline=False)
                 await ctx.respond(embed=embed, ephemeral=True)
+@bot.slash_command(name="profile")
+@discord.option(name="member", type=discord.Member, default=None)
+async def profile(ctx: discord.ApplicationContext, member: discord.Member=None) -> None:
+    await ctx.defer()
+    target = ctx.author
+    if member != None:
+        target = member
+    profile_embed = discord.Embed(title=f"Profile of {target}")
+    async with bot.pool.acquire()as conn:
+        async with conn.cursor(aiomysql.DictCursor)as cursor:
+            await cursor.execute("SELECT messagecount FROM messagecounter WHERE authorID=%s AND guildID=%s;", (target.id, ctx.guild_id))
+            messagecount_fetch = await cursor.fetchall()
+            if messagecount_fetch == ():# does not exist
+                ctr = 0
+                for channel in ctx.guild.text_channels:
+                    async for message in channel.history():
+                        if message.author == target:
+                            ctr += 1
+                profile_embed.add_field(name="messages sent", value=f"**{ctr}** messages")
+                await cursor.execute("INSERT INTO messagecounter VALUES(%s, %s, %s);", (target.id, ctx.guild_id, ctr)) # caching the result
+                await conn.commit()
+            else:
+                profile_embed.add_field(name="messages sent", value="**{}** messages".format(messagecount_fetch[0]["messagecount"]))
+            # getting the invites
+            if ctx.guild.invites_disabled == False:
+                ctr = 0
+                invites = await ctx.guild.invites()
+                for invite in invites:
+                    if invite.inviter == target:
+                        ctr += invite.uses
+                profile_embed.add_field(name="invite count", value=f"**{ctr}** invites")
+            await ctx.respond(embed=profile_embed)
 bot.run(config.BOT_TOKEN)

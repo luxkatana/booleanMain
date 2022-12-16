@@ -198,7 +198,6 @@ class Utils(commands.Cog):
             invites = await ctx.guild.invites()
             high_to_low = []
             invites = list(filter(lambda j: j.uses != 0, invites))
-            print(invites)
 
             while invites != []:
                 new, high = await remove(invites)
