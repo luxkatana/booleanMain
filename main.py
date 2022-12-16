@@ -243,17 +243,36 @@ async def profile(ctx: discord.ApplicationContext, member: discord.Member=None) 
             await cursor.execute("SELECT messagecount FROM messagecounter WHERE authorID=%s AND guildID=%s;", (target.id, ctx.guild_id))
             messagecount_fetch = await cursor.fetchall()
             if messagecount_fetch == ():# does not exist
-                ctr = 0
+                total = 0
+                channels = {}
                 for channel in ctx.guild.text_channels:
+                    ctr = 0
                     async for message in channel.history():
                         if message.author == target:
                             ctr += 1
-                profile_embed.add_field(name="messages sent", value=f"**{ctr}** messages")
-                await cursor.execute("INSERT INTO messagecounter VALUES(%s, %s, %s);", (target.id, ctx.guild_id, ctr)) # caching the result
-                await conn.commit()
+                    channels.update({channel.id: ctr})
+                    total += ctr
+                # get the highest
+                highest_buffer = {"channel": 00, "count": 0}
+                for channel in channels:
+                    if channels[channel] > highest_buffer["count"]:
+                        highest_buffer = {"channel": channel, "count": channels[channel]}
+                profile_embed.add_field(name="messages sent", value=f"**{total}** messages")
+                profile_embed.add_field(name="active channel", value="channel: <#{}>, **message sent there: {} messages**".format(highest_buffer["channel"], highest_buffer["count"]))
             else:
+                channels = {}
+                for channel in ctx.guild.text_channels:
+                    ctr = 0
+                    async for message in channel.history():
+                        if message.author == target:
+                            ctr += 1
+                    channels.update({channel.id: ctr})
+                highest_buffer = {"channel": 00, "count": 0}
+                for channel in channels:
+                    if channels[channel] > highest_buffer["count"]:
+                        highest_buffer = {"channel": channel, "count": channels[channel]}
                 profile_embed.add_field(name="messages sent", value="**{}** messages".format(messagecount_fetch[0]["messagecount"]))
-            # getting the invites
+                profile_embed.add_field(name="active channel", value="channel: <#{}>, **message sent there: {} messages**".format(highest_buffer["channel"], highest_buffer["count"]))
             if ctx.guild.invites_disabled == False:
                 ctr = 0
                 invites = await ctx.guild.invites()
