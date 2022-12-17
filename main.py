@@ -1,4 +1,4 @@
-import discord, aiomysql, time
+import discord, aiomysql, time, random
 import config
 from discord.ext import commands
 bot = commands.Bot(command_prefix="./", intents=discord.Intents.all(),
@@ -238,6 +238,7 @@ async def profile(ctx: discord.ApplicationContext, member: discord.Member=None) 
     if member != None:
         target = member
     profile_embed = discord.Embed(title=f"Profile of {target}")
+    profile_embed.set_thumbnail(url=target.display_avatar.url)
     async with bot.pool.acquire()as conn:
         async with conn.cursor(aiomysql.DictCursor)as cursor:
             await cursor.execute("SELECT messagecount FROM messagecounter WHERE authorID=%s AND guildID=%s;", (target.id, ctx.guild_id))
@@ -254,11 +255,21 @@ async def profile(ctx: discord.ApplicationContext, member: discord.Member=None) 
                     total += ctr
                 # get the highest
                 highest_buffer = {"channel": 00, "count": 0}
+                high_to_low = []
                 for channel in channels:
                     if channels[channel] > highest_buffer["count"]:
+                        high_to_low.append({"channel": channel, "count": channels[channel]})
                         highest_buffer = {"channel": channel, "count": channels[channel]}
+                formatted_active_channels = ""
+                for i in range(len(high_to_low), 0, -1):
+                    try:
+                        value = high_to_low[i - 1]
+                    except:
+                        break
+                    formatted_active_channels += "{}st. channel: <#{}> messages: **{}**\n".format(len(high_to_low) - i + 1, value["channel"], value["count"])
+
                 profile_embed.add_field(name="messages sent", value=f"**{total}** messages")
-                profile_embed.add_field(name="active channel", value="channel: <#{}>, **message sent there: {} messages**".format(highest_buffer["channel"], highest_buffer["count"]))
+                profile_embed.add_field(name="Active channels", value=formatted_active_channels, inline=False)
             else:
                 channels = {}
                 for channel in ctx.guild.text_channels:
@@ -268,11 +279,20 @@ async def profile(ctx: discord.ApplicationContext, member: discord.Member=None) 
                             ctr += 1
                     channels.update({channel.id: ctr})
                 highest_buffer = {"channel": 00, "count": 0}
+                high_to_low = []
                 for channel in channels:
                     if channels[channel] > highest_buffer["count"]:
+                        high_to_low.append({"channel": channel, "count": channels[channel]})
                         highest_buffer = {"channel": channel, "count": channels[channel]}
+                formatted_active_channels = ""
+                for i in range(len(high_to_low), 0, -1):
+                    try:
+                        value = high_to_low[i - 1]
+                    except:
+                        break
+                    formatted_active_channels += "{}st. channel: <#{}> messages: **{}**\n".format(i + 1, value["channel"], value["count"])
                 profile_embed.add_field(name="messages sent", value="**{}** messages".format(messagecount_fetch[0]["messagecount"]))
-                profile_embed.add_field(name="active channel", value="channel: <#{}>, **message sent there: {} messages**".format(highest_buffer["channel"], highest_buffer["count"]))
+                profile_embed.add_field(name="active channel", value="channel: <#{}>, **message sent there: {} messages**\n".format(highest_buffer["channel"], highest_buffer["count"]))
             if ctx.guild.invites_disabled == False:
                 ctr = 0
                 invites = await ctx.guild.invites()
@@ -280,5 +300,7 @@ async def profile(ctx: discord.ApplicationContext, member: discord.Member=None) 
                     if invite.inviter == target:
                         ctr += invite.uses
                 profile_embed.add_field(name="invite count", value=f"**{ctr}** invites")
+            
             await ctx.respond(embed=profile_embed)
+
 bot.run(config.BOT_TOKEN)
